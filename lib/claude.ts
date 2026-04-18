@@ -29,12 +29,13 @@ export type FinancialPersona =
 export interface CategoryResult {
   categories: { name: string; total: number; transactions: number }[];
   riskScore: number;
+  riskReasons: string[];
   summary: string;
-  penaltyEstimates: PenaltyEstimate[];
-  totalPenaltyRisk: number;
-  disclaimer: string;
+  complianceFlags: string[];
   financialPersona: FinancialPersona;
   personaDescription: string;
+  totalPenaltyRisk: number;
+  actionPlan: string[];
 }
 
 /**
@@ -48,27 +49,22 @@ export async function analyzeExpenses(
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const system =
-    "You are a financial analyst. Analyze the provided expense records and return " +
-    "a JSON object with these keys: " +
-    '"categories" (an array of objects each with "name" string, "total" number, and "transactions" number), ' +
-    '"riskScore" (a number from 0 to 100), ' +
-    '"summary" (a short paragraph), ' +
-    '"penaltyEstimates" (an array of objects each with "flag" string describing the compliance issue, ' +
-    '"estimatedPenalty" number in dollars assuming a 24% federal tax bracket, and "basis" string explaining the calculation), ' +
-    '"totalPenaltyRisk" (the sum of all estimatedPenalty values), and ' +
-    '"disclaimer" (always set to "These penalty estimates are rough illustrations assuming a 24% tax bracket. ' +
-    'Actual penalties depend on filing status, state laws, prior history, and other factors. Consult a tax professional."). ' +
-    "If no compliance issues are found, return an empty penaltyEstimates array and totalPenaltyRisk of 0. " +
-    'Also include "financialPersona" (one of exactly: "Creative Investor", "Cautious Builder", "Growth Sprinter", or "Compliance Risk") ' +
-    "chosen based on the spending patterns, and " +
-    '"personaDescription" (a single sentence describing the user\'s financial personality based on their spending). ' +
-    "Return ONLY valid JSON, no markdown fences. " +
-    FOREIGN_CONTRACTOR_DISCLAIMER;
+    'You are a financial compliance assistant. Analyze the expense data and return ONLY valid JSON with exactly this structure, keep all strings SHORT: ' +
+    '{ "categories": [{"name": "string max 20 chars", "total": number, "transactions": number}], ' +
+    '"riskScore": number between 0-100, ' +
+    '"riskReasons": ["short string", "short string", "short string"], ' +
+    '"summary": "max 2 sentences only", ' +
+    '"complianceFlags": ["short flag 1", "short flag 2", "short flag 3"], ' +
+    '"financialPersona": "one of: Creative Investor, Cautious Builder, Growth Sprinter, Compliance Risk", ' +
+    '"personaDescription": "one sentence max", ' +
+    '"totalPenaltyRisk": number, ' +
+    '"actionPlan": ["step 1 short", "step 2 short", "step 3 short", "step 4 short", "step 5 short"] } ' +
+    'Return ONLY the JSON object. No markdown. No extra text. Keep ALL strings under 100 characters.';
 
   try {
     const res = await client.messages.create({
       model: MODEL,
-      max_tokens: 1024,
+      max_tokens: 4096,
       system,
       messages: [{ role: "user", content: JSON.stringify(expenseData) }],
     });
@@ -116,7 +112,7 @@ export async function chatAboutExpenses(
   try {
     const res = await client.messages.create({
       model: MODEL,
-      max_tokens: 1024,
+      max_tokens: 4096,
       system,
       messages: [
         {
