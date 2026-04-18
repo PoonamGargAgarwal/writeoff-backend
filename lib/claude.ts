@@ -67,7 +67,7 @@ export async function analyzeExpenses(
 
   try {
     const res = await client.messages.create({
-      model: MODEL,
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system,
       messages: [{ role: "user", content: JSON.stringify(expenseData) }],
@@ -104,7 +104,7 @@ export async function chatAboutExpenses(
 
   try {
     const res = await client.messages.create({
-      model: MODEL,
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system,
       messages: [
