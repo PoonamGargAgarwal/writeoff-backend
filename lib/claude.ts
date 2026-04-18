@@ -67,20 +67,31 @@ export async function analyzeExpenses(
 
   try {
     const res = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: MODEL,
       max_tokens: 1024,
       system,
       messages: [{ role: "user", content: JSON.stringify(expenseData) }],
     });
 
-    const block = res.content[0];
-    const text = block.type === "text" ? block.text : "";
+    const rawText = res.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("");
 
-    const clean = text
-    .replace(/```json\n?/g, '')
-    .replace(/```\n?/g, '')
-    .trim();
-    return JSON.parse(clean);
+    console.log("Claude raw response:", rawText);
+
+    if (!rawText || rawText.trim() === "") {
+      throw new Error("Claude returned empty response");
+    }
+
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error(
+        "No JSON found in Claude response: " + rawText.substring(0, 200),
+      );
+    }
+
+    return JSON.parse(jsonMatch[0]);
   } catch (error) {
     console.error("Claude API error in analyzeExpenses:", error);
     throw error;
@@ -104,7 +115,7 @@ export async function chatAboutExpenses(
 
   try {
     const res = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: MODEL,
       max_tokens: 1024,
       system,
       messages: [
