@@ -1,6 +1,7 @@
 import { getApiKeys } from "@/lib/config";
 import { analyzeExpenses } from "@/lib/claude";
 import { parseCSV } from "@/lib/csvParser";
+import { searchIRSRule } from "@/lib/tinyfish";
 
 export async function POST(request: Request) {
   // Check API key
@@ -74,7 +75,27 @@ export async function POST(request: Request) {
     };
     console.log("GOVERNANCE AUDIT:", JSON.stringify(auditLog));
 
-    return Response.json({ ...result, auditId });
+    // Enrich each compliance flag with live IRS search (top 3 flags)
+    const irsReferences = await Promise.all(
+      (result.complianceFlags || []).slice(0, 3).map(async (flag: string) => {
+        const irsResults = await searchIRSRule(flag);
+        return { flag, irsResults };
+      }),
+    );
+
+    return Response.json({
+      ...result,
+      auditId,
+      irsReferences,
+      governance: {
+        modelVersion: "claude-haiku-4-5-20251001",
+        tinyfishEnabled: true,
+        ruleFramework: "IRS-Publication-535-2024",
+        analysisTimestamp: new Date().toISOString(),
+        disclaimer:
+          "AI analysis for informational purposes only.",
+      },
+    });
   } catch (err) {
     console.error("Analysis error:", err);
     return Response.json({
