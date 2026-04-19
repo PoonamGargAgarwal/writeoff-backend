@@ -14,14 +14,67 @@ function findColumn(headers: string[], candidates: string[]): number {
   return headers.findIndex((h) => candidates.includes(h));
 }
 
+// Date pattern: MM/DD/YYYY, M/D/YYYY, MM-DD-YYYY, YYYY-MM-DD
+const DATE_PATTERN = /^(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})$/;
+
+/**
+ * Parses bank statement CSVs where there's no usable header row.
+ * Identifies data rows by checking if column 1 matches a date pattern.
+ * Column mapping: col1=date, col3=description, col4=debit, col5=credit.
+ * Amount = credit - debit (positive for credits, negative for debits).
+ */
+function parseBankStatement(lines: string[]): ExpenseRecord[] {
+  const records: ExpenseRecord[] = [];
+
+  for (const line of lines) {
+    const cols = line.split(",").map((c) => c.trim());
+    if (cols.length < 5) continue;
+
+    const dateCandidate = cols[0];
+    if (!DATE_PATTERN.test(dateCandidate)) continue;
+
+    const date = dateCandidate;
+    const description = cols[2] || "";
+    if (!description) continue;
+
+    const rawDebit = cols[3] || "";
+    const rawCredit = cols[4] || "";
+
+    const debit = rawDebit ? Number(rawDebit) : 0;
+    const credit = rawCredit ? Number(rawCredit) : 0;
+
+    if (rawDebit && !Number.isFinite(debit)) continue;
+    if (rawCredit && !Number.isFinite(credit)) continue;
+    if (!rawDebit && !rawCredit) continue;
+
+    // Positive for credits (income), negative for debits (expenses)
+    const amount = credit - debit;
+
+    records.push({ date, description, amount });
+  }
+
+  return records;
+}
+
 /**
  * Parses CSV content into expense records.
- * Uses the first row as a header to map columns.
- * Recognizes common column name variations for date, description, and amount.
- * Supports separate debit/credit columns — debits become positive, credits negative.
+ * First tries header-based parsing with flexible column name detection.
+ * Falls back to bank statement format (date-pattern detection, fixed columns).
  * Skips rows with missing fields or non-numeric amounts.
  */
 export function parseCSV(csvContent: string): ExpenseRecord[] {
+  const lines = csvContent.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+
+  // Try header-based parsing first
+  const headerRecords = parseWithHeaders(lines);
+  if (headerRecords.length > 0) return headerRecords;
+
+  // Fall back to bank statement format
+  return parseBankStatement(lines);
+}
+
+function parseWithHeaders(lines: string[]): ExpenseRecord[] {
   const lines = csvContent.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
 
