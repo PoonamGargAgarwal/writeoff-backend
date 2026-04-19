@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   }
 
   // Parse body
-  let body: { question?: string; expenseData?: ExpenseRecord[] };
+  let body: Record<string, any>;
   try {
     body = await request.json();
   } catch {
@@ -26,27 +26,22 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!body.question || typeof body.question !== "string") {
-    return Response.json(
-      { error: "A question is required" },
-      { status: 400 },
-    );
-  }
+  console.log("Chat request body:", JSON.stringify(body));
 
-  if (!body.expenseData || !Array.isArray(body.expenseData)) {
+  const question = body.question || body.message || body.query;
+  const expenseData: ExpenseRecord[] =
+    body.expenseData || body.records || body.data || [];
+
+  if (!question) {
     return Response.json(
-      { error: "Expense data is required" },
+      { error: "Question is required" },
       { status: 400 },
     );
   }
 
   // Call Claude
   try {
-    const answer = await chatAboutExpenses(
-      apiKey,
-      body.question,
-      body.expenseData,
-    );
+    const answer = await chatAboutExpenses(apiKey, question, expenseData);
     return new Response(answer, {
       status: 200,
       headers: { "Content-Type": "text/plain" },
