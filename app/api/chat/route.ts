@@ -29,8 +29,20 @@ export async function POST(request: Request) {
   console.log("Chat request body:", JSON.stringify(body));
 
   const question = body.question || body.message || body.query;
-  const expenseData: ExpenseRecord[] =
+  let expenseData: ExpenseRecord[] =
     body.expenseData || body.records || body.data || [];
+
+  // If no expense data provided, give Claude general context
+  if (expenseData.length === 0) {
+    expenseData = [
+      {
+        date: "context",
+        description:
+          "The user has uploaded a bank statement with multiple transactions including cash withdrawals, contractor payments, and mixed personal and business expenses.",
+        amount: 0,
+      },
+    ];
+  }
 
   if (!question) {
     return Response.json(
