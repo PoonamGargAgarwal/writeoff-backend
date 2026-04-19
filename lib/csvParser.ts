@@ -75,7 +75,6 @@ export function parseCSV(csvContent: string): ExpenseRecord[] {
 }
 
 function parseWithHeaders(lines: string[]): ExpenseRecord[] {
-  const lines = csvContent.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
 
   const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
