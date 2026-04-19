@@ -14,17 +14,27 @@ export interface ExpenseRecord {
   amount: number;
 }
 
-export interface PenaltyEstimate {
-  flag: string;
-  estimatedPenalty: number;
-  basis: string;
-}
-
 export type FinancialPersona =
   | "Creative Investor"
   | "Cautious Builder"
   | "Growth Sprinter"
   | "Compliance Risk";
+
+export interface Governance {
+  modelVersion: string;
+  ruleFramework: string;
+  analysisTimestamp: string;
+  disclaimer: string;
+  confidenceNote: string;
+}
+
+export interface Explanation {
+  flag: string;
+  irsRule: string;
+  evidence: string;
+  confidence: number;
+  resolution: string;
+}
 
 export interface CategoryResult {
   categories: { name: string; total: number; transactions: number }[];
@@ -32,15 +42,21 @@ export interface CategoryResult {
   riskReasons: string[];
   summary: string;
   complianceFlags: string[];
+  totalPenaltyRisk: number;
+  recoverableSavings: number;
+  actionPlan: string[];
   financialPersona: FinancialPersona;
   personaDescription: string;
-  totalPenaltyRisk: number;
-  actionPlan: string[];
+  explanations: Explanation[];
+  governance: Governance;
 }
 
 /**
  * Sends expense data to Claude API with a system prompt for categorization.
- * Returns a CategoryResult with categories, riskScore, and summary.
+ *
+ * NOTE: No expense data is persisted. All data is held in local variables
+ * that go out of scope when the function returns. Nothing is written to
+ * disk, database, or module-level state.
  */
 export async function analyzeExpenses(
   apiKey: string,
@@ -49,17 +65,21 @@ export async function analyzeExpenses(
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const system =
-    'You are a financial compliance assistant. Analyze the expense data and return ONLY valid JSON with exactly this structure, keep all strings SHORT: ' +
-    '{ "categories": [{"name": "string max 20 chars", "total": number, "transactions": number}], ' +
-    '"riskScore": number between 0-100, ' +
-    '"riskReasons": ["short string", "short string", "short string"], ' +
-    '"summary": "max 2 sentences only", ' +
-    '"complianceFlags": ["short flag 1", "short flag 2", "short flag 3"], ' +
-    '"financialPersona": "one of: Creative Investor, Cautious Builder, Growth Sprinter, Compliance Risk", ' +
-    '"personaDescription": "one sentence max", ' +
-    '"totalPenaltyRisk": number, ' +
-    '"actionPlan": ["step 1 short", "step 2 short", "step 3 short", "step 4 short", "step 5 short"] } ' +
-    'Return ONLY the JSON object. No markdown. No extra text. Keep ALL strings under 100 characters.';
+    "You are a financial compliance assistant for US small businesses. " +
+    "Analyze the expense data and return ONLY raw JSON with no markdown, no code blocks, no extra text. " +
+    'Use exactly this structure: ' +
+    '{"categories":[{"name":"string","total":number,"transactions":number}],' +
+    '"riskScore":number,' +
+    '"riskReasons":["string","string","string"],' +
+    '"summary":"2 sentences max",' +
+    '"complianceFlags":["string","string"],' +
+    '"totalPenaltyRisk":number,' +
+    '"recoverableSavings":number,' +
+    '"actionPlan":["string","string","string","string","string"],' +
+    '"financialPersona":"Creative Investor",' +
+    '"personaDescription":"one sentence",' +
+    '"explanations":[{"flag":"short issue name","irsRule":"IRC section e.g. IRC 162","evidence":"what in data triggered this","confidence":number 0-100,"resolution":"what user should do"}]} ' +
+    "Keep ALL strings under 60 characters. Return raw JSON only.";
 
   try {
     const res = await client.messages.create({
@@ -70,11 +90,9 @@ export async function analyzeExpenses(
     });
 
     const rawText = res.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
+      .filter((b: any) => b.type === "text")
+      .map((b: any) => b.text)
       .join("");
-
-    console.log("Claude raw response:", rawText);
 
     if (!rawText || rawText.trim() === "") {
       throw new Error("Claude returned empty response");
@@ -82,14 +100,24 @@ export async function analyzeExpenses(
 
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      throw new Error(
-        "No JSON found in Claude response: " + rawText.substring(0, 200),
-      );
+      throw new Error("No JSON found in response");
     }
 
-    return JSON.parse(jsonMatch[0]);
+    const result = JSON.parse(jsonMatch[0]);
+
+    return {
+      ...result,
+      governance: {
+        modelVersion: "claude-haiku-4-5-20251001",
+        ruleFramework: "IRS-Publication-535-2024",
+        analysisTimestamp: new Date().toISOString(),
+        disclaimer:
+          "AI analysis for informational purposes only. Verify with a licensed CPA before filing.",
+        confidenceNote: "Flags are risk indicators not definitive rulings",
+      },
+    };
   } catch (error) {
-    console.error("Claude API error in analyzeExpenses:", error);
+    console.error("analyzeExpenses failed:", error);
     throw error;
   }
 }
@@ -125,7 +153,7 @@ export async function chatAboutExpenses(
     const block = res.content[0];
     return block.type === "text" ? block.text : "";
   } catch (error) {
-    console.error("Claude API error in chatAboutExpenses:", error);
+    console.error("chatAboutExpenses failed:", error);
     throw error;
   }
 }
